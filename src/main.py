@@ -1,60 +1,108 @@
-from pathlib import Path
-import sys
+"""Punto de entrada del RPG."""
+
 import pygame
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from settings import SCREEN_WIDTH, SCREEN_HEIGHT, FPS, TITLE, BACKGROUND_COLOR, WORLD_WIDTH, WORLD_HEIGHT
+from settings import (
+    SCREEN_WIDTH,
+    SCREEN_HEIGHT,
+    SCREEN_TITLE,
+    FPS,
+)
+
 from entities.player import Player
-from world.camera import Camera
-from systems.save_game import save_player, load_player
+from world.tiled_map import TiledMap
+from systems.save_game import save_game, load_game
 
-pygame.init()
-screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-pygame.display.set_caption(TITLE)
-clock = pygame.time.Clock()
-font = pygame.font.Font(None, 25)
 
-start_x, start_y = load_player(WORLD_WIDTH / 2, WORLD_HEIGHT / 2)
-player = Player(start_x, start_y)
-camera = Camera()
-running = True
+def main():
+    pygame.init()
 
-while running:
-    dt = min(clock.tick(FPS) / 1000.0, 0.05)
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            save_player(player)
-            running = False
-        elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_ESCAPE:
-                save_player(player)
+    screen = pygame.display.set_mode(
+        (SCREEN_WIDTH, SCREEN_HEIGHT)
+    )
+    pygame.display.set_caption(SCREEN_TITLE)
+
+    clock = pygame.time.Clock()
+    font = pygame.font.Font(None, 24)
+
+    # Cargar mapa y colisiones.
+    world = TiledMap()
+
+    # Recuperar la posición guardada, si existe.
+    saved_position = load_game()
+
+    if saved_position is not None:
+        start_x = saved_position["x"]
+        start_y = saved_position["y"]
+    else:
+        start_x = world.width / 2
+        start_y = world.height * 0.75
+
+    player = Player(start_x, start_y)
+
+    # Si la posición guardada está dentro de un obstáculo,
+    # iniciar en una posición segura predeterminada.
+    if world.collides(player.collision_rect):
+        player.position.update(
+            world.width / 2,
+            world.height * 0.75,
+        )
+
+    running = True
+
+    while running:
+        dt = min(clock.tick(FPS) / 1000.0, 0.05)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                save_game(player)
                 running = False
-            elif event.key == pygame.K_SPACE:
-                player.start_attack()
-            elif event.key == pygame.K_F5:
-                save_player(player)
 
-    keys = pygame.key.get_pressed()
-    player.update(dt, keys)
-    camera.update(player)
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    save_game(player)
+                    running = False
 
-    screen.fill(BACKGROUND_COLOR)
-    # Fondo provisional para probar movimiento y cámara antes de importar el mapa TMX.
-    tile = 64
-    start_col = camera.x // tile
-    end_col = (camera.x + SCREEN_WIDTH) // tile + 1
-    start_row = camera.y // tile
-    end_row = (camera.y + SCREEN_HEIGHT) // tile + 1
-    for row in range(start_row, end_row):
-        for col in range(start_col, end_col):
-            color = (80, 140, 78) if (row + col) % 2 == 0 else (76, 134, 74)
-            pygame.draw.rect(screen, color, (col * tile - camera.x, row * tile - camera.y, tile, tile))
+                elif event.key == pygame.K_F5:
+                    save_game(player)
 
-    player.draw(screen, camera)
-    help_text = "WASD/Flechas: mover   ESPACIO: atacar   F5: guardar   ESC: guardar y salir"
-    screen.blit(font.render(help_text, True, (255, 255, 255)), (14, 12))
-    screen.blit(font.render("Prototipo: mapa provisional; siguiente paso, cargar el mapa de Tiled.", True, (255, 255, 255)), (14, 39))
-    pygame.display.flip()
+                elif event.key == pygame.K_SPACE:
+                    player.start_attack()
 
-pygame.quit()
+        if not running:
+            break
+
+        keys = pygame.key.get_pressed()
+        player.update(dt, keys, world)
+
+        # Dibujar el mapa completo sin cámara.
+        world.draw(screen)
+
+        # Dibujar al jugador encima del escenario.
+        player.draw(screen)
+
+        # Indicaciones de controles.
+        controls = font.render(
+            "WASD/Flechas: mover | Espacio: atacar | "
+            "F5: guardar | ESC: salir",
+            True,
+            (255, 255, 255),
+        )
+
+        # Fondo oscuro para que el texto sea legible.
+        background = pygame.Surface(
+            (controls.get_width() + 16, 30),
+            pygame.SRCALPHA,
+        )
+        background.fill((0, 0, 0, 160))
+
+        screen.blit(background, (5, 5))
+        screen.blit(controls, (13, 11))
+
+        pygame.display.flip()
+
+    pygame.quit()
+
+
+if __name__ == "__main__":
+    main()

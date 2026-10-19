@@ -1,15 +1,24 @@
-"""Configuración general del prototipo RPG."""
+"""Configuración general del juego."""
+
 SCREEN_WIDTH = 960
 SCREEN_HEIGHT = 640
+SCREEN_TITLE = "Mi RPG - Tiny Swords"
 FPS = 60
-TITLE = "RPG - Tiny Swords"
 
-# Los sprites originales del paquete tienen celdas de 192 x 192 píxeles.
+# Tamaño original de cada cuadro de las animaciones.
 SPRITE_FRAME_WIDTH = 192
 SPRITE_FRAME_HEIGHT = 192
+
+# Tamaño al que se dibuja el personaje.
 PLAYER_DRAW_SIZE = 96
-PLAYER_SPEED = 220  # píxeles por segundo
+
+# Área que se utiliza para detectar colisiones.
+PLAYER_COLLISION_WIDTH = 30
+PLAYER_COLLISION_HEIGHT = 22
+PLAYER_COLLISION_OFFSET_Y = 22
+
+# Velocidad del jugador en píxeles por segundo.
+PLAYER_SPEED = 180
+
+# Velocidad de reproducción de las animaciones.
 ANIMATION_FPS = 8
-WORLD_WIDTH = 2400
-WORLD_HEIGHT = 1800
-BACKGROUND_COLOR = (77, 135, 75)
