@@ -13,6 +13,8 @@ from entities.player import Player
 from world.tiled_map import TiledMap
 from systems.save_game import save_game, load_game
 
+from entities.enemy import Enemy
+from entities.arrow import Arrow
 
 def main():
     pygame.init()
@@ -39,6 +41,14 @@ def main():
         start_y = world.height * 0.75
 
     player = Player(start_x, start_y)
+
+    # Enemigos colocados en posiciones del mapa.
+    enemy_group = pygame.sprite.Group(
+        Enemy(x=400, y=300, unit_type="red", patrol_radius=150),
+        Enemy(x=650, y=400, unit_type="black", patrol_radius=120),
+    )
+    arrow_group = pygame.sprite.Group()
+    map_bounds = pygame.Rect(0, 0, world.width, world.height)
 
     # Si la posición guardada está dentro de un obstáculo,
     # iniciar en una posición segura predeterminada.
@@ -69,22 +79,52 @@ def main():
                 elif event.key == pygame.K_SPACE:
                     player.start_attack()
 
+                elif event.key == pygame.K_f:
+                    arrow = player.shoot_arrow()
+                    if arrow is not None:
+                        arrow_group.add(arrow)
+
         if not running:
             break
 
         keys = pygame.key.get_pressed()
         player.update(dt, keys, world)
 
+        # Actualizar enemigos después de actualizar al jugador.
+        for enemy in enemy_group:
+            enemy.update(player)
+
+        arrow_group.update(dt)
+        for arrow in arrow_group:
+            if not map_bounds.colliderect(arrow.rect):
+                arrow.kill()
+                continue
+
+            for enemy in pygame.sprite.spritecollide(arrow, enemy_group, False):
+                enemy.health -= arrow.damage
+                enemy.health_bar.health = max(0, enemy.health)
+                arrow.kill()
+                if enemy.health <= 0:
+                    enemy.kill()
+                break
+
         # Dibujar el mapa completo sin cámara.
         world.draw(screen)
+
+        # Dibujar enemigos entre el mapa y el jugador.
+        for enemy in enemy_group:
+            enemy.draw(screen)
+
+        for arrow in arrow_group:
+            arrow.draw(screen)
 
         # Dibujar al jugador encima del escenario.
         player.draw(screen)
 
         # Indicaciones de controles.
         controls = font.render(
-            "WASD/Flechas: mover | Espacio: atacar | "
-            "F5: guardar | ESC: salir",
+            "WASD/Flechas: mover | Espacio: ataque 1 | k: ataque 2 | j: defenderse |"
+            " F: arco | h: curarse | m: morir | r: revivir | F5: guardar | ESC: salir",
             True,
             (255, 255, 255),
         )

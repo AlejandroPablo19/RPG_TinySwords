@@ -44,6 +44,7 @@ class TiledMap:
 
     def draw(self, surface):
         """Dibuja las capas de tiles del mapa."""
+        
         for layer in self.tmx.visible_layers:
             if isinstance(layer, pytmx.TiledTileLayer):
                 for x, y, image in layer.tiles():
@@ -54,7 +55,10 @@ class TiledMap:
                                 x * self.tmx.tilewidth,
                                 y * self.tmx.tileheight,
                             ),
+                            
                         )
+
+    
 
     def collides(self, rect):
         """Devuelve True si el rectángulo toca algún obstáculo."""
