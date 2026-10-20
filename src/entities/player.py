@@ -17,8 +17,9 @@ from entities.arrow import Arrow
 
 ROOT = Path(__file__).resolve().parents[2]
 SPRITES = ROOT / "assets" / "images" / "player" / "Warrior"
+ARCHER_SPRITES = ROOT / "assets" / "images" / "player" / "Archer"
 EFFECTS = ROOT / "assets" / "images" / "effects"
-ARROW_SPRITE = ROOT / "assets" / "images" / "player" / "Archer" / "Arrow.png"
+ARROW_SPRITE = ARCHER_SPRITES / "Arrow.png"
 
 
 class Player:
@@ -32,6 +33,8 @@ class Player:
         self.defending = False
         self.healing = False
         self.is_dead = False
+        self.shooting = False
+        self.shoot_elapsed = 0.0
         self.arrow_cooldown = 0.0
         self.heal_frame_index = 0
         self.heal_animation_elapsed = 0.0
@@ -52,6 +55,10 @@ class Player:
         self.attack1_frames = self._load_sheet(SPRITES, "Warrior_Attack1.png")
         self.attack2_frames = self._load_sheet(SPRITES, "Warrior_Attack2.png")
         self.guard_frames = self._load_sheet(SPRITES, "Warrior_Guard.png")
+        self.archer_shoot_frames = self._load_sheet(
+            ARCHER_SPRITES,
+            "Archer_Shoot.png",
+        )
 
         self.heal_effect_frames = self._load_sheet(
             EFFECTS,
@@ -111,7 +118,13 @@ class Player:
         return frames
 
     def start_attack(self, combo=1):
-        if not self.is_dead and not self.attacking and not self.defending and not self.healing:
+        if (
+            not self.is_dead
+            and not self.attacking
+            and not self.defending
+            and not self.healing
+            and not self.shooting
+        ):
             self.attacking = True
             self.attack_type = combo
             self.attack_elapsed = 0.0
@@ -119,7 +132,14 @@ class Player:
             self.animation_elapsed = 0.0
 
     def shoot_arrow(self):
-        if self.is_dead or self.defending or self.healing or self.arrow_cooldown > 0:
+        if (
+            self.is_dead
+            or self.defending
+            or self.healing
+            or self.shooting
+            or self.attacking
+            or self.arrow_cooldown > 0
+        ):
             return None
 
         directions = {
@@ -129,6 +149,9 @@ class Player:
             "right": pygame.Vector2(1, 0),
         }
         direction = directions[self.facing]
+        self.shooting = True
+        self.shoot_elapsed = 0.0
+        self.frame_index = 0
         self.arrow_cooldown = 0.35
 
         return Arrow(
@@ -188,7 +211,12 @@ class Player:
 
         self.moving = direction.length_squared() > 0
 
-        if self.moving and not self.attacking and not self.defending:
+        if (
+            self.moving
+            and not self.attacking
+            and not self.defending
+            and not self.shooting
+        ):
             direction = direction.normalize()
             if abs(direction.x) > abs(direction.y):
                 self.facing = "right" if direction.x > 0 else "left"
@@ -211,8 +239,13 @@ class Player:
         self.position.y = max(half, min(world.height - half, self.position.y))
 
         # Selección de animación según estado actual
-        if self.is_dead:
-            frames = self.death_frames
+        if self.shooting:
+            frames = self.archer_shoot_frames
+            self.shoot_elapsed += dt
+            if self.shoot_elapsed >= len(frames) / ANIMATION_FPS:
+                self.shooting = False
+                self.shoot_elapsed = 0.0
+                self.frame_index = 0
         elif self.attacking:
             frames = self.attack2_frames if self.attack_type == 2 else self.attack1_frames
             self.attack_elapsed += dt
@@ -228,7 +261,12 @@ class Player:
             frames = self.run_frames if self.moving else self.idle_frames
 
         # Control de fotogramas
-        if self.attacking:
+        if self.shooting:
+            self.frame_index = min(
+                int(self.shoot_elapsed * ANIMATION_FPS),
+                len(frames) - 1,
+            )
+        elif self.attacking:
             self.frame_index = min(int(self.attack_elapsed * ANIMATION_FPS), len(frames) - 1)
         else:
             self.animation_elapsed += dt
