@@ -20,5 +20,9 @@ PLAYER_COLLISION_OFFSET_Y = 22
 # Velocidad del jugador en píxeles por segundo.
 PLAYER_SPEED = 180
 
+# Daño del ataque enemigo e invulnerabilidad temporal del jugador.
+ENEMY_ATTACK_DAMAGE = 10
+PLAYER_DAMAGE_COOLDOWN = 1.0
+
 # Velocidad de reproducción de las animaciones.
 ANIMATION_FPS = 8

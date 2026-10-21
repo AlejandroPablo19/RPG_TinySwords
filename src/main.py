@@ -44,7 +44,7 @@ def main():
 
     # Enemigos colocados en posiciones del mapa.
     enemy_group = pygame.sprite.Group(
-        Enemy(x=400, y=300, unit_type="red", patrol_radius=150),
+        Enemy(x=400, y=250, unit_type="red", patrol_radius=100),
         Enemy(x=650, y=400, unit_type="black", patrol_radius=120),
     )
     arrow_group = pygame.sprite.Group()
@@ -57,6 +57,7 @@ def main():
             world.width / 2,
             world.height * 0.75,
         )
+    player.respawn()
 
     running = True
 
@@ -79,6 +80,10 @@ def main():
                 elif event.key == pygame.K_SPACE:
                     player.start_attack()
 
+                elif event.key == pygame.K_r:
+                    if player.is_dead:
+                        player.respawn()
+
                 elif event.key == pygame.K_f:
                     arrow = player.shoot_arrow()
                     if arrow is not None:
@@ -90,9 +95,19 @@ def main():
         keys = pygame.key.get_pressed()
         player.update(dt, keys, world)
 
+        attack_hit = player.consume_attack_hit()
+        if attack_hit is not None:
+            hitbox, damage = attack_hit
+            for enemy in enemy_group:
+                if enemy.collision_rect.colliderect(hitbox):
+                    enemy.health = max(0, enemy.health - damage)
+                    enemy.health_bar.health = enemy.health
+                    if enemy.health == 0:
+                        enemy.kill()
+
         # Actualizar enemigos después de actualizar al jugador.
         for enemy in enemy_group:
-            enemy.update(player)
+            enemy.update(player, world, dt)
 
         arrow_group.update(dt)
         for arrow in arrow_group:
@@ -101,6 +116,7 @@ def main():
                 continue
 
             for enemy in pygame.sprite.spritecollide(arrow, enemy_group, False):
+                player.sounds["arrow_hit"].play()
                 enemy.health -= arrow.damage
                 enemy.health_bar.health = max(0, enemy.health)
                 arrow.kill()

@@ -11,6 +11,7 @@ from settings import (
     PLAYER_COLLISION_OFFSET_Y,
     PLAYER_SPEED,
     ANIMATION_FPS,
+    PLAYER_DAMAGE_COOLDOWN,
 )
 from ui.health_bar import HealthBar
 from entities.arrow import Arrow
@@ -19,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SPRITES = ROOT / "assets" / "images" / "player" / "Warrior"
 ARCHER_SPRITES = ROOT / "assets" / "images" / "player" / "Archer"
 EFFECTS = ROOT / "assets" / "images" / "effects"
+SOUNDS = ROOT / "assets" / "sounds"
 ARROW_SPRITE = ARCHER_SPRITES / "Arrow.png"
 
 
@@ -34,6 +36,8 @@ class Player:
         self.healing = False
         self.is_dead = False
         self.shooting = False
+        self.footsteps_channel = None
+        self.damage_cooldown = 0.0
         self.shoot_elapsed = 0.0
         self.arrow_cooldown = 0.0
         self.heal_frame_index = 0
@@ -43,6 +47,8 @@ class Player:
 
         self.attack_type = 1
         self.attack_elapsed = 0.0
+        self.attack_hit_applied = False
+        self.attack_hit_pending = False
         self.frame_index = 0
         self.animation_elapsed = 0.0
 
@@ -50,6 +56,17 @@ class Player:
         self.max_health = 100
         self.health = 100
         self.health_bar = HealthBar(-15, -35, 52, 8, self.max_health)
+        self.sounds = {
+            "attack1": self._load_sound("Sword Attack 1 Sound Effect.mp3"),
+            "attack2": self._load_sound("Sword Attack 2 Sound Effect.mp3"),
+            "defend": self._load_sound("Shield Effect.mp3"),
+            "death": self._load_sound("Explosion Sound Effect.mp3"),
+            "heal": self._load_sound("Heal Sound Effect.mp3"),
+            "bow": self._load_sound("Arrow Sound Effect (Bow).mp3"),
+            "arrow_hit": self._load_sound("Arrow Sound Effect (Arrow).mp3"),
+            "footsteps": self._load_sound("Footsteps Sound Effect.mp3"),
+            "respawn": self._load_sound("Respawn Sound Effect.mp3"),
+        }
 
         # Carga de frames de animaciones del jugador
         self.idle_frames = self._load_sheet(SPRITES, "Warrior_Idle.png")
@@ -77,6 +94,48 @@ class Player:
 
         self.image = self.idle_frames[0]
         self.rect = self.image.get_rect(center=(round(x), round(y)))
+
+    @staticmethod
+    def _load_sound(filename):
+        path = SOUNDS / filename
+        if not path.exists():
+            raise FileNotFoundError(f"No se encontró el sonido: {path}")
+        return pygame.mixer.Sound(str(path))
+
+    def _update_footsteps(self, walking):
+        if walking:
+            if (
+                self.footsteps_channel is None
+                or not self.footsteps_channel.get_busy()
+            ):
+                self.footsteps_channel = self.sounds["footsteps"].play(loops=-1)
+        elif self.footsteps_channel is not None:
+            self.footsteps_channel.stop()
+            self.footsteps_channel = None
+
+    def respawn(self):
+        self.is_dead = False
+        self.health = self.max_health
+        self.damage_cooldown = 0.0
+        self.death_frame_index = 0
+        self.death_animation_elapsed = 0.0
+        self.health_bar.health = self.health
+        self.sounds["respawn"].play()
+
+    def take_damage(self, amount):
+        if self.is_dead or self.defending or self.damage_cooldown > 0:
+            return False
+
+        self.health = max(0, self.health - amount)
+        self.health_bar.health = self.health
+        self.damage_cooldown = PLAYER_DAMAGE_COOLDOWN
+        if self.health == 0:
+            self.is_dead = True
+            self.death_frame_index = 0
+            self.death_animation_elapsed = 0.0
+            self._update_footsteps(False)
+            self.sounds["death"].play()
+        return True
 
     @property
     def collision_rect(self):
@@ -137,8 +196,34 @@ class Player:
             self.attacking = True
             self.attack_type = combo
             self.attack_elapsed = 0.0
+            self.attack_hit_applied = False
+            self.attack_hit_pending = False
             self.frame_index = 0
             self.animation_elapsed = 0.0
+            sound = self.sounds["attack2" if combo == 2 else "attack1"]
+            sound.play()
+
+    def consume_attack_hit(self):
+        if not self.attack_hit_pending:
+            return None
+
+        self.attack_hit_pending = False
+        hitbox = self._attack_hitbox()
+        damage = 40 if self.attack_type == 2 else 25
+        return hitbox, damage
+
+    def _attack_hitbox(self):
+        reach = 44
+        width = 38
+        center_x = round(self.position.x)
+        center_y = round(self.position.y + PLAYER_COLLISION_OFFSET_Y)
+        if self.facing == "up":
+            return pygame.Rect(center_x - width // 2, center_y - reach + 11, width, reach)
+        if self.facing == "down":
+            return pygame.Rect(center_x - width // 2, center_y - 11, width, reach)
+        if self.facing == "left":
+            return pygame.Rect(center_x - reach + 11, center_y - width // 2, reach, width)
+        return pygame.Rect(center_x - 11, center_y - width // 2, reach, width)
 
     def shoot_arrow(self):
         if (
@@ -162,6 +247,7 @@ class Player:
         self.shoot_elapsed = 0.0
         self.frame_index = 0
         self.arrow_cooldown = 0.35
+        self.sounds["bow"].play()
 
         return Arrow(
             self.position.x + direction.x * 28,
@@ -172,21 +258,19 @@ class Player:
 
     def update(self, dt, keys, world):
         self.arrow_cooldown = max(0.0, self.arrow_cooldown - dt)
+        self.damage_cooldown = max(0.0, self.damage_cooldown - dt)
 
         # Comprobaciones de control por teclado para Pruebas:
         if keys[pygame.K_m]:  # Simular Muerte
             if not self.is_dead:
                 self.death_frame_index = 0
                 self.death_animation_elapsed = 0.0
+                self.sounds["death"].play()
             self.is_dead = True
             self.health = 0
-        if keys[pygame.K_r]:  # Revivir
-            self.is_dead = False
-            self.health = self.max_health
-            self.death_frame_index = 0
-            self.death_animation_elapsed = 0.0
 
         if self.is_dead:
+            self._update_footsteps(False)
             self.health_bar.health = 0
             self.death_animation_elapsed += dt
             self.death_frame_index = min(
@@ -200,6 +284,7 @@ class Player:
             if not self.healing:
                 self.heal_frame_index = 0
                 self.heal_animation_elapsed = 0.0
+                self.sounds["heal"].play()
             self.healing = True
             self.health = min(self.max_health, self.health + 0.3)
         else:
@@ -207,6 +292,8 @@ class Player:
 
         # Defensa (Tecla J)
         if keys[pygame.K_j]:
+            if not self.defending:
+                self.sounds["defend"].play()
             self.defending = True
         else:
             self.defending = False
@@ -230,6 +317,7 @@ class Player:
 
         self.moving = direction.length_squared() > 0
 
+        previous_position = self.position.copy()
         if (
             self.moving
             and not self.attacking
@@ -256,6 +344,13 @@ class Player:
         half = self.scale / 2
         self.position.x = max(half, min(world.width - half, self.position.x))
         self.position.y = max(half, min(world.height - half, self.position.y))
+        walking = (
+            self.position != previous_position
+            and not self.attacking
+            and not self.defending
+            and not self.shooting
+        )
+        self._update_footsteps(walking)
 
         # Selección de animación según estado actual
         if self.shooting:
@@ -287,6 +382,10 @@ class Player:
             )
         elif self.attacking:
             self.frame_index = min(int(self.attack_elapsed * ANIMATION_FPS), len(frames) - 1)
+            hit_frame = max(1, len(frames) // 2)
+            if self.frame_index >= hit_frame and not self.attack_hit_applied:
+                self.attack_hit_applied = True
+                self.attack_hit_pending = True
         else:
             self.animation_elapsed += dt
             if self.animation_elapsed >= 1 / ANIMATION_FPS:
