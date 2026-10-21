@@ -38,6 +38,8 @@ class Player:
         self.arrow_cooldown = 0.0
         self.heal_frame_index = 0
         self.heal_animation_elapsed = 0.0
+        self.death_frame_index = 0
+        self.death_animation_elapsed = 0.0
 
         self.attack_type = 1
         self.attack_elapsed = 0.0
@@ -63,6 +65,13 @@ class Player:
         self.heal_effect_frames = self._load_sheet(
             EFFECTS,
             "Heal_Effect.png",
+            draw_size=PLAYER_DRAW_SIZE,
+        )
+        self.death_effect_frames = self._load_sheet(
+            EFFECTS,
+            "Dust_01.png",
+            frame_width=64,
+            frame_height=64,
             draw_size=PLAYER_DRAW_SIZE,
         )
 
@@ -166,14 +175,24 @@ class Player:
 
         # Comprobaciones de control por teclado para Pruebas:
         if keys[pygame.K_m]:  # Simular Muerte
+            if not self.is_dead:
+                self.death_frame_index = 0
+                self.death_animation_elapsed = 0.0
             self.is_dead = True
             self.health = 0
         if keys[pygame.K_r]:  # Revivir
             self.is_dead = False
             self.health = self.max_health
+            self.death_frame_index = 0
+            self.death_animation_elapsed = 0.0
 
         if self.is_dead:
             self.health_bar.health = 0
+            self.death_animation_elapsed += dt
+            self.death_frame_index = min(
+                int(self.death_animation_elapsed * ANIMATION_FPS),
+                len(self.death_effect_frames) - 1,
+            )
             return  # Si está muerto, bloquea el resto de acciones
 
         # Curación con carne (Tecla H)
@@ -291,6 +310,11 @@ class Player:
         self.health_bar.health = self.health
 
     def draw(self, surface):
+        if self.is_dead:
+            effect = self.death_effect_frames[self.death_frame_index]
+            surface.blit(effect, effect.get_rect(center=self.rect.center))
+            return
+
         surface.blit(self.image, self.rect)
 
         if self.healing and not self.is_dead:
